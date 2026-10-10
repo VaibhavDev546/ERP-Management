@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { ModuleManagement } from '@/components/module-management'
 import {
   Activity,
   ArrowDownRight,
@@ -118,6 +119,7 @@ function RecordsSection({ section, onCreate }: { section: Section; onCreate: () 
 
 function ConfigSection({ section, onCreate }: { section: Section; onCreate: () => void }) {
   const isFields = section === 'Field Management'; const isModules = section === 'Module Management'; const isPlans = section === 'Plan Management';
+  if (isModules) return <ModuleManagement />
   const cards = isFields ? [['Student ID','student_id','Text · School Management','Required'],['Emergency contact','emergency_contact','Phone · HR & Payroll','Optional'],['Enrollment date','enrollment_date','Date · School Management','Required'],['Department','department','Single select · HR & Payroll','Optional']] : isModules ? [['School Management','school-management','Education · v2.4','8 tenants'],['Inventory Management','inventory-management','Operations · v1.8','24 tenants'],['HR & Payroll','hr-payroll','People · v1.6','18 tenants'],['CRM','crm','Sales · v3.1','31 tenants']] : [['Starter','starter','$29 / month · 5 modules','42 tenants'],['Growth','growth','$99 / month · 12 modules','86 tenants'],['Professional','professional','$249 / month · 18 modules','64 tenants'],['Enterprise','enterprise','Custom pricing · All modules','22 tenants']];
   return <section className="panel full-panel"><div className="panel-heading"><div><div className="eyebrow">Configuration</div><h2>{section}</h2><p>{sectionDescriptions[section]}</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} />Create {isFields ? 'field' : isModules ? 'module' : 'plan'}</button></div><div className="toolbar"><div className="search-box"><Search size={16} /><input placeholder={`Search ${section.toLowerCase()}...`} /></div><button className="filter-button"><Filter size={15} />Filters</button><button className="filter-button">Recently updated <ChevronDown size={15} /></button></div><div className="config-grid">{cards.map((card, i) => <div className="config-card" key={card[0]}><div className="config-card-top"><div className={`config-icon icon-${i}`}>{isFields ? <FileCog size={18} /> : isModules ? <Package size={18} /> : <ClipboardList size={18} />}</div><button className="icon-button"><Ellipsis size={17} /></button></div><h3>{card[0]}</h3><code>{card[1]}</code><p>{card[2]}</p><div className="config-footer"><StatusBadge status="Active" /><span>{card[3]}</span></div></div>)}</div></section>
 }
