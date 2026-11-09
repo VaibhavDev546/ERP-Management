@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import {
   ArrowDownRight,
@@ -172,7 +173,7 @@ function Overview({ goTo }: { goTo: (section: Section) => void }) {
       </section>
     </div>
     <div className="content-grid lower-grid">
-      <section className="panel table-panel"><div className="panel-heading"><div><h2>Recently added tenants</h2><p>Latest organizations returned by the API</p></div><button className="text-button" onClick={() => goTo('Tenants')}>View all <ChevronRight size={15} /></button></div>
+      <section className="panel table-panel"><div className="panel-heading"><div><h2>Recently added tenants</h2><p>Latest organizations returned by the API</p></div><Link className="text-button" href="/tenants">View all <ChevronRight size={15} /></Link></div>
         {loading ? <p className="muted">Loading dashboard data…</p> : <TenantTable rows={tenants} />}
       </section>
       <section className="panel">
@@ -181,7 +182,7 @@ function Overview({ goTo }: { goTo: (section: Section) => void }) {
       </section>
     </div>
     <section className="quick-actions"><div><h2>Platform directories</h2><p>Open live records managed by the backend.</p></div><div className="action-buttons">
-      <button onClick={() => goTo('Tenants')}>View tenants</button><button onClick={() => goTo('Module Management')}>Manage modules</button><button onClick={() => goTo('Plan Management')}>View plans</button>
+      <Link href="/tenants">View tenants</Link><button onClick={() => goTo('Module Management')}>Manage modules</button><button onClick={() => goTo('Plan Management')}>View plans</button>
     </div></section>
   </>
 }
@@ -250,7 +251,9 @@ function Page() {
       <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>ERP Management</span><span className="brand-badge">ADMIN</span><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu"><X size={18} /></button></div>
         <div className="workspace-switch"><div className="workspace-logo">E</div><div><strong>Platform workspace</strong><small>Super Admin</small></div><ChevronDown size={15} /></div>
-        <nav><span className="nav-label">Workspace</span>{navigation.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${section === label ? 'active' : ''}`} onClick={() => { setSection(label); setSidebarOpen(false) }}><Icon size={17} /><span>{label}</span></button>)}</nav>
+        <nav><span className="nav-label">Workspace</span>{navigation.map(({ label, icon: Icon }) => label === 'Tenants'
+          ? <Link key={label} href="/tenants" className={`nav-item ${section === label ? 'active' : ''}`}><Icon size={17} /><span>{label}</span></Link>
+          : <button key={label} className={`nav-item ${section === label ? 'active' : ''}`} onClick={() => { setSection(label); setSidebarOpen(false) }}><Icon size={17} /><span>{label}</span></button>)}</nav>
         <div className="sidebar-bottom"><a className="nav-item payroll-app-link" href={PAYROLL_APP_URL} target="_blank" rel="noreferrer"><WalletCards size={17} /><span>Open Payroll Flow</span><ChevronRight size={14} /></a><div className="help-card"><div className="help-icon"><CircleHelp size={17} /></div><div><strong>Backend connected</strong><small>{new URL(apiBaseUrl).host}</small></div></div>
           <div className="profile"><div className="profile-avatar">{(user?.full_name || user?.email || 'SA').split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{user?.full_name || user?.email}</strong><small>{user?.role || (user?.is_superuser ? 'Super Admin' : 'Platform staff')}</small></div><button className="icon-button logout-button" onClick={() => void signOut()} title="Sign out" aria-label="Sign out"><MoreHorizontal size={17} /></button></div>
         </div>
