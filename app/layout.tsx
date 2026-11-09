@@ -1,10 +1,11 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import './platform.css'
 
 export const metadata: Metadata = {
-  title: 'Northstar — Super Admin',
-  description: 'A modern control center for managing your SaaS platform.',
+  title: 'ERP Management — Super Admin',
+  description: 'Platform administration for ERP Management.',
   generator: 'v0.app',
   icons: {
     icon: [

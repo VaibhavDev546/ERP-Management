@@ -1,50 +1,47 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { ModuleManagement } from '@/components/module-management'
+import { useEffect, useState } from 'react'
 import {
-  Activity,
   ArrowDownRight,
   ArrowUpRight,
-  BarChart3,
-  Bell,
   Building2,
-  Check,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   CircleHelp,
   ClipboardList,
-  Clock3,
-  Command,
   CreditCard,
-  Database,
-  Ellipsis,
   FileCog,
-  Filter,
-  FolderKanban,
-  Globe2,
   LayoutDashboard,
-  LibraryBig,
   Menu,
-  MoreHorizontal,
   Moon,
+  MoreHorizontal,
   Package,
-  Plus,
   Search,
   Settings,
-  ShieldCheck,
   Sparkles,
   Sun,
   Users,
+  WalletCards,
   X,
   Zap,
 } from 'lucide-react'
+import { ModuleManagement } from '@/components/module-management'
+import { PlatformLogin } from '@/components/platform-login'
+import { PlatformRecords } from '@/components/platform-records'
+import { ApiError, apiBaseUrl, getPlatformList, getPlatformUser, platformLogin, platformLogout, platformRequest, type PlatformUser } from '@/lib/platform-api'
 
 type Section = 'Overview' | 'Tenants' | 'Field Management' | 'Module Management' | 'Plan Management' | 'Subscription Management' | 'User Management' | 'Settings'
 type Theme = 'light' | 'dark'
-
-type Tenant = { name: string; owner: string; email: string; plan: string; users: number; status: 'Active' | 'Trial' | 'Suspended'; initials: string; color: string }
+type Tenant = { id: string; name: string; slug: string; email: string; status: string; created_at: string }
+type TenantApiRecord = { id: string; name: string; slug: string; contact_email: string; status: string; created_at: string }
+type Analytics = {
+  tenants: Record<string, number>
+  subscriptions: Record<string, number>
+  mrr: Record<string, number>
+  active_employees: number
+  new_tenants_30d: number
+  open_tickets: number
+}
 
 const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: 'Overview', icon: LayoutDashboard },
@@ -57,79 +54,219 @@ const navigation: { label: Section; icon: typeof LayoutDashboard }[] = [
   { label: 'Settings', icon: Settings },
 ]
 
-const tenants: Tenant[] = [
-  { name: 'Northstar Academy', owner: 'Amelia Stone', email: 'amelia@northstar.edu', plan: 'Professional', users: 128, status: 'Active', initials: 'NA', color: 'violet' },
-  { name: 'Cedar & Co.', owner: 'Marcus Chen', email: 'marcus@cedarco.com', plan: 'Growth', users: 46, status: 'Active', initials: 'CC', color: 'orange' },
-  { name: 'Lumina Health', owner: 'Priya Nair', email: 'priya@lumina.health', plan: 'Enterprise', users: 284, status: 'Active', initials: 'LH', color: 'sky' },
-  { name: 'Harbor Logistics', owner: 'Jon Bell', email: 'jon@harborlogistics.io', plan: 'Starter', users: 18, status: 'Trial', initials: 'HL', color: 'emerald' },
-  { name: 'Atlas Creative', owner: 'Nia Woods', email: 'nia@atlascreative.co', plan: 'Growth', users: 62, status: 'Suspended', initials: 'AC', color: 'rose' },
-]
-
 const sectionDescriptions: Record<Section, string> = {
-  Overview: 'A high-level view of your platform performance.',
-  Tenants: 'Manage every organization on your platform.',
-  'Field Management': 'Define reusable fields for future business modules.',
-  'Module Management': 'Control the business capabilities available to tenants.',
-  'Plan Management': 'Create and configure subscription packages.',
-  'Subscription Management': 'Monitor tenant subscriptions and billing status.',
-  'User Management': 'Manage platform users and tenant membership.',
-  Settings: 'Configure platform-wide preferences and defaults.',
+  Overview: 'A live view of your platform performance.',
+  Tenants: 'Organizations registered on your platform.',
+  'Field Management': 'Custom fields configured in the backend.',
+  'Module Management': 'Backend product modules and dependencies.',
+  'Plan Management': 'Subscription plans configured for your platform.',
+  'Subscription Management': 'Tenant subscriptions and billing periods.',
+  'User Management': 'Platform staff accounts.',
+  Settings: 'Platform-wide backend settings.',
 }
+const PAYROLL_APP_URL = process.env.NEXT_PUBLIC_PAYROLL_APP_URL ?? 'http://localhost:3000'
 
 function StatusBadge({ status }: { status: string }) {
-  const style = status === 'Active' ? 'status-active' : status === 'Trial' ? 'status-trial' : status === 'Suspended' ? 'status-suspended' : 'status-neutral'
+  const normalized = status.toLowerCase()
+  const style = normalized === 'active' ? 'status-active' : normalized === 'trial' || normalized === 'trialing' ? 'status-trial' : normalized === 'suspended' ? 'status-suspended' : 'status-neutral'
   return <span className={`status-badge ${style}`}><span className="status-dot" />{status}</span>
 }
 
-function MetricCard({ icon: Icon, label, value, trend, positive = true, accent }: { icon: typeof Users; label: string; value: string; trend: string; positive?: boolean; accent: string }) {
+function MetricCard({ icon: Icon, label, value, trend, positive = true, accent, context }: {
+  icon: typeof Users
+  label: string
+  value: string
+  trend: string
+  positive?: boolean
+  accent: string
+  context: string
+}) {
   return (
     <div className="metric-card">
-      <div className="metric-top"><div className={`metric-icon ${accent}`}><Icon size={18} /></div><button className="icon-button"><MoreHorizontal size={17} /></button></div>
+      <div className="metric-top"><div className={`metric-icon ${accent}`}><Icon size={18} /></div><MoreHorizontal size={17} className="muted" /></div>
       <p className="metric-label">{label}</p><div className="metric-value">{value}</div>
-      <div className="metric-trend">{positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}<span className={positive ? 'trend-up' : 'trend-down'}>{trend}</span><span className="muted">vs last month</span></div>
+      <div className="metric-trend">{positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}<span className={positive ? 'trend-up' : 'trend-down'}>{trend}</span><span className="muted">{context}</span></div>
     </div>
   )
 }
 
+function TenantTable({ rows }: { rows: Tenant[] }) {
+  return (
+    <div className="table-scroll"><table><thead><tr><th>Organization</th><th>Slug</th><th>Contact email</th><th>Status</th><th>Created</th></tr></thead>
+      <tbody>{rows.map(tenant => <tr key={tenant.id}>
+        <td><strong>{tenant.name}</strong></td><td>{tenant.slug}</td><td>{tenant.email}</td><td><StatusBadge status={tenant.status} /></td>
+        <td>{tenant.created_at ? new Date(tenant.created_at).toLocaleDateString() : '—'}</td>
+      </tr>)}
+        {!rows.length && <tr><td colSpan={5}>No tenant records returned by the backend.</td></tr>}</tbody>
+    </table></div>
+  )
+}
+
 function Overview({ goTo }: { goTo: (section: Section) => void }) {
+  const [analytics, setAnalytics] = useState<Analytics | null>(null)
+  const [tenants, setTenants] = useState<Tenant[]>([])
+  const [moduleCount, setModuleCount] = useState<number | null>(null)
+  const [errors, setErrors] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      const results = await Promise.allSettled([
+        platformRequest<Analytics>('/platform/analytics/overview/'),
+        getPlatformList<TenantApiRecord>('/platform/tenants/?ordering=-created_at'),
+        getPlatformList<{ id: string }>('/platform/modules/'),
+      ])
+      if (!active) return
+      const messages: string[] = []
+      const [analyticsResult, tenantResult, moduleResult] = results
+      if (analyticsResult.status === 'fulfilled') setAnalytics(analyticsResult.value)
+      else messages.push(`Analytics: ${analyticsResult.reason instanceof Error ? analyticsResult.reason.message : 'request failed'}`)
+      if (tenantResult.status === 'fulfilled') {
+        setTenants(tenantResult.value.results.slice(0, 5).map(tenant => ({
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          email: tenant.contact_email,
+          status: tenant.status,
+          created_at: tenant.created_at,
+        })))
+      } else messages.push(`Tenants: ${tenantResult.reason instanceof Error ? tenantResult.reason.message : 'request failed'}`)
+      if (moduleResult.status === 'fulfilled') setModuleCount(moduleResult.value.count)
+      else messages.push(`Modules: ${moduleResult.reason instanceof Error ? moduleResult.reason.message : 'request failed'}`)
+      setErrors(messages)
+      setLoading(false)
+    }
+    void load()
+    return () => { active = false }
+  }, [])
+
+  const totalTenants = analytics ? Object.values(analytics.tenants).reduce((sum, count) => sum + count, 0) : 0
+  const totalSubscriptions = analytics ? Object.values(analytics.subscriptions).reduce((sum, count) => sum + count, 0) : 0
+  const activeTenants = analytics?.tenants.active ?? 0
+  const activeSubscriptions = analytics?.subscriptions.active ?? 0
+
   return <>
+    {errors.map(error => <div className="api-error overview-error" role="alert" key={error}>{error}</div>)}
     <div className="metrics-grid">
-      <MetricCard icon={Building2} label="Total tenants" value="1,284" trend="12.8%" accent="purple" />
-      <MetricCard icon={Zap} label="Active tenants" value="1,196" trend="8.4%" accent="blue" />
-      <MetricCard icon={Package} label="Available modules" value="24" trend="4.2%" accent="orange" />
-      <MetricCard icon={CreditCard} label="Active subscriptions" value="1,108" trend="16.2%" accent="green" />
+      <MetricCard icon={Building2} label="Total tenants" value={loading ? '…' : String(totalTenants)} trend={String(analytics?.new_tenants_30d ?? 0)} context="new in 30 days" accent="purple" />
+      <MetricCard icon={Zap} label="Active tenants" value={loading ? '…' : String(activeTenants)} trend={`${totalTenants ? Math.round(activeTenants / totalTenants * 100) : 0}%`} context="of all tenants" accent="blue" />
+      <MetricCard icon={Package} label="Available modules" value={moduleCount === null ? '…' : String(moduleCount)} trend="Live" context="from catalogue" accent="orange" />
+      <MetricCard icon={CreditCard} label="Active subscriptions" value={loading ? '…' : String(activeSubscriptions)} trend={`${totalSubscriptions} total`} context="all statuses" accent="green" />
     </div>
     <div className="content-grid">
-      <section className="panel chart-panel"><div className="panel-heading"><div><h2>Tenant growth</h2><p>New tenant registrations over the last 30 days</p></div><button className="select-button">Last 30 days <ChevronDown size={15} /></button></div><div className="chart-area"><div className="chart-y"><span>1.4k</span><span>1.0k</span><span>600</span><span>200</span><span>0</span></div><div className="chart"><div className="grid-lines"><i /><i /><i /><i /><i /></div><svg viewBox="0 0 600 190" preserveAspectRatio="none" aria-label="Tenant growth chart"><defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#7c5cff" stopOpacity=".25" /><stop offset="100%" stopColor="#7c5cff" stopOpacity="0" /></linearGradient></defs><path d="M0,155 C35,148 52,132 78,138 S124,104 153,117 S190,88 218,99 S255,77 288,90 S322,46 355,65 S395,33 430,53 S467,26 496,41 S542,15 600,18 L600,190 L0,190 Z" fill="url(#area)" /><path d="M0,155 C35,148 52,132 78,138 S124,104 153,117 S190,88 218,99 S255,77 288,90 S322,46 355,65 S395,33 430,53 S467,26 496,41 S542,15 600,18" fill="none" stroke="#8068ff" strokeWidth="3" strokeLinecap="round" /></svg><div className="chart-x"><span>01 May</span><span>08 May</span><span>15 May</span><span>22 May</span><span>30 May</span></div></div></div></section>
-      <section className="panel"><div className="panel-heading"><div><h2>Tenant status</h2><p>Distribution by account status</p></div><button className="icon-button"><Ellipsis size={17} /></button></div><div className="donut-wrap"><div className="donut"><div><strong>1,284</strong><small>Total</small></div></div><div className="legend"><div><span className="legend-dot purple-dot" />Active <b>93.1%</b></div><div><span className="legend-dot orange-dot" />Trial <b>4.8%</b></div><div><span className="legend-dot gray-dot" />Suspended <b>2.1%</b></div></div></div></section>
+      <section className="panel">
+        <div className="panel-heading"><div><h2>Tenant accounts</h2><p>Current tenant status counts from the backend</p></div></div>
+        <div className="live-status-list">
+          {Object.entries(analytics?.tenants ?? {}).map(([status, count]) => <div key={status}><StatusBadge status={status} /><strong>{count}</strong></div>)}
+          {!analytics && !loading && <p>Analytics are unavailable.</p>}
+        </div>
+      </section>
+      <section className="panel">
+        <div className="panel-heading"><div><h2>Monthly recurring revenue</h2><p>Active subscriptions, grouped by currency</p></div></div>
+        <div className="live-mrr">{Object.entries(analytics?.mrr ?? {}).map(([currency, amount]) => <div key={currency}><span>{currency}</span><strong>{/^[A-Z]{3}$/.test(currency) ? new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(amount) : `${amount} ${currency}`}</strong></div>)}
+          {analytics && Object.keys(analytics.mrr).length === 0 && <p>No active subscription revenue yet.</p>}
+          {!analytics && !loading && <p>Analytics are unavailable.</p>}
+        </div>
+      </section>
     </div>
-    <div className="content-grid lower-grid"><section className="panel table-panel"><div className="panel-heading"><div><h2>Recent tenants</h2><p>Latest organizations to join your platform</p></div><button className="text-button" onClick={() => goTo('Tenants')}>View all <ChevronRight size={15} /></button></div><TenantTable rows={tenants.slice(0, 4)} /></section><section className="panel"><div className="panel-heading"><div><h2>Most-used modules</h2><p>Adoption across active tenants</p></div><button className="icon-button"><Ellipsis size={17} /></button></div><div className="module-list">{[['School Management','78%','purple'],['Inventory Management','64%','blue'],['CRM','52%','orange'],['HR & Payroll','41%','green']].map(([name, percent, color], index) => <div className="module-row" key={name}><div className={`module-symbol ${color}`}>{index === 0 ? <LibraryBig size={16} /> : index === 1 ? <Database size={16} /> : index === 2 ? <Users size={16} /> : <FolderKanban size={16} />}</div><div className="module-copy"><span>{name}</span><div className="progress"><i style={{ width: percent }} className={color} /></div></div><b>{percent}</b></div>)}</div></section></div>
-    <section className="quick-actions"><div><h2>Quick actions</h2><p>Jump into the most common admin tasks.</p></div><div className="action-buttons"><button onClick={() => goTo('Tenants')}><Plus size={16} />Create tenant</button><button onClick={() => goTo('Module Management')}><Plus size={16} />Create module</button><button onClick={() => goTo('Plan Management')}><Plus size={16} />Create plan</button></div></section>
+    <div className="content-grid lower-grid">
+      <section className="panel table-panel"><div className="panel-heading"><div><h2>Recently added tenants</h2><p>Latest organizations returned by the API</p></div><button className="text-button" onClick={() => goTo('Tenants')}>View all <ChevronRight size={15} /></button></div>
+        {loading ? <p className="muted">Loading dashboard data…</p> : <TenantTable rows={tenants} />}
+      </section>
+      <section className="panel">
+        <div className="panel-heading"><div><h2>Platform activity</h2><p>Live totals from backend analytics</p></div></div>
+        <div className="live-mrr"><div><span>Active employees</span><strong>{analytics?.active_employees ?? '—'}</strong></div><div><span>Open support tickets</span><strong>{analytics?.open_tickets ?? '—'}</strong></div></div>
+      </section>
+    </div>
+    <section className="quick-actions"><div><h2>Platform directories</h2><p>Open live records managed by the backend.</p></div><div className="action-buttons">
+      <button onClick={() => goTo('Tenants')}>View tenants</button><button onClick={() => goTo('Module Management')}>Manage modules</button><button onClick={() => goTo('Plan Management')}>View plans</button>
+    </div></section>
   </>
 }
 
-function TenantTable({ rows }: { rows: Tenant[] }) { return <div className="table-scroll"><table><thead><tr><th>Organization</th><th>Owner</th><th>Plan</th><th>Users</th><th>Status</th><th /></tr></thead><tbody>{rows.map(t => <tr key={t.name}><td><div className="org-cell"><span className={`avatar ${t.color}`}>{t.initials}</span><div><strong>{t.name}</strong><small>{t.email}</small></div></div></td><td>{t.owner}</td><td><span className="plan-pill">{t.plan}</span></td><td>{t.users}</td><td><StatusBadge status={t.status} /></td><td><button className="icon-button"><Ellipsis size={16} /></button></td></tr>)}</tbody></table></div> }
+function Page() {
+  const [section, setSection] = useState<Section>('Overview')
+  const [theme, setTheme] = useState<Theme>('light')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [authStatus, setAuthStatus] = useState<'checking' | 'signed-out' | 'signed-in'>('checking')
+  const [user, setUser] = useState<PlatformUser | null>(null)
+  const [authError, setAuthError] = useState('')
 
-function RecordsSection({ section, onCreate }: { section: Section; onCreate: () => void }) {
-  const isUsers = section === 'User Management'; const isSubs = section === 'Subscription Management';
-  const rows = isUsers ? [['Amelia Stone','amelia@northstar.edu','Northstar Academy','TENANT_OWNER','Active'],['Marcus Chen','marcus@cedarco.com','Cedar & Co.','TENANT_OWNER','Active'],['Priya Nair','priya@lumina.health','Lumina Health','TENANT_ADMIN','Active'],['Jon Bell','jon@harborlogistics.io','Harbor Logistics','TENANT_OWNER','Trial']] : isSubs ? [['Northstar Academy','Professional','May 04, 2024','May 04, 2025','$249 / mo','Active'],['Cedar & Co.','Growth','May 12, 2024','May 12, 2025','$99 / mo','Active'],['Lumina Health','Enterprise','Apr 28, 2024','Apr 28, 2025','$499 / mo','Active'],['Harbor Logistics','Starter','Jun 01, 2024','Jun 01, 2024','$29 / mo','Trial']] : [['Northstar Academy','northstar-academy','Professional','128','Active'],['Cedar & Co.','cedar-co','Growth','46','Active'],['Lumina Health','lumina-health','Enterprise','284','Active'],['Harbor Logistics','harbor-logistics','Starter','18','Trial']];
-  const titles = isUsers ? ['Name','Tenant','Role','Status'] : isSubs ? ['Tenant','Plan','Start date','Renewal','Amount','Status'] : ['Organization','Slug','Plan','Users','Status'];
-  return <section className="panel full-panel"><div className="panel-heading"><div><div className="eyebrow">Directory</div><h2>{section}</h2><p>{sectionDescriptions[section]}</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} />Create {isUsers ? 'user' : isSubs ? 'subscription' : section === 'Tenants' ? 'tenant' : 'record'}</button></div><div className="toolbar"><div className="search-box"><Search size={16} /><input placeholder={`Search ${section.toLowerCase()}...`} /></div><button className="filter-button"><Filter size={15} />Filters</button><button className="filter-button">All statuses <ChevronDown size={15} /></button></div><div className="table-scroll"><table><thead><tr>{titles.map(t => <th key={t}>{t}</th>)}<th /></tr></thead><tbody>{rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{j === row.length - 1 ? <StatusBadge status={cell} /> : j === 0 && !isSubs ? <div className="org-cell"><span className={`avatar ${['violet','orange','sky','emerald'][i]}`}>{cell.split(' ').map(w => w[0]).join('').slice(0,2)}</span><strong>{cell}</strong></div> : <span className={j === 2 && isUsers ? 'role-text' : ''}>{cell}</span>}</td>)}<td><button className="icon-button"><Ellipsis size={16} /></button></td></tr>)}</tbody></table></div><div className="pagination"><span>Showing 1–4 of 1,284 results</span><div><button className="page-button"><ChevronLeft size={15} /></button><button className="page-button active-page">1</button><button className="page-button">2</button><button className="page-button">3</button><button className="page-button"><ChevronRight size={15} /></button></div></div></section>
+  useEffect(() => {
+    const saved = window.localStorage.getItem('super-admin-theme') as Theme | null
+    if (saved) setTheme(saved)
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    window.localStorage.setItem('super-admin-theme', theme)
+  }, [theme])
+
+  useEffect(() => {
+    let active = true
+    getPlatformUser().then(currentUser => {
+      if (!active) return
+      setUser(currentUser)
+      setAuthStatus('signed-in')
+    }).catch(error => {
+      if (!active) return
+      if (!(error instanceof ApiError && error.status === 401)) {
+        setAuthError(error instanceof Error ? error.message : `Could not connect to ${apiBaseUrl}.`)
+      }
+      setAuthStatus('signed-out')
+    })
+    return () => { active = false }
+  }, [])
+
+  async function signIn(email: string, password: string) {
+    setAuthError('')
+    await platformLogin(email, password)
+    const currentUser = await getPlatformUser()
+    setUser(currentUser)
+    setAuthStatus('signed-in')
+  }
+
+  async function signOut() {
+    try {
+      await platformLogout()
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'The backend could not end the session.')
+    } finally {
+      setUser(null)
+      setAuthStatus('signed-out')
+    }
+  }
+
+  if (authStatus === 'checking') {
+    return <main className="login-page"><p className="muted">Connecting to the backend…</p></main>
+  }
+  if (authStatus === 'signed-out') return <PlatformLogin error={authError} onLogin={signIn} />
+
+  const heading = section === 'Overview' ? `Welcome, ${user?.full_name || user?.email}` : section
+  return (
+    <div className="app-shell">
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+        <div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>ERP Management</span><span className="brand-badge">ADMIN</span><button className="mobile-close" onClick={() => setSidebarOpen(false)} aria-label="Close menu"><X size={18} /></button></div>
+        <div className="workspace-switch"><div className="workspace-logo">E</div><div><strong>Platform workspace</strong><small>Super Admin</small></div><ChevronDown size={15} /></div>
+        <nav><span className="nav-label">Workspace</span>{navigation.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${section === label ? 'active' : ''}`} onClick={() => { setSection(label); setSidebarOpen(false) }}><Icon size={17} /><span>{label}</span></button>)}</nav>
+        <div className="sidebar-bottom"><a className="nav-item payroll-app-link" href={PAYROLL_APP_URL} target="_blank" rel="noreferrer"><WalletCards size={17} /><span>Open Payroll Flow</span><ChevronRight size={14} /></a><div className="help-card"><div className="help-icon"><CircleHelp size={17} /></div><div><strong>Backend connected</strong><small>{new URL(apiBaseUrl).host}</small></div></div>
+          <div className="profile"><div className="profile-avatar">{(user?.full_name || user?.email || 'SA').split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase()}</div><div><strong>{user?.full_name || user?.email}</strong><small>{user?.role || (user?.is_superuser ? 'Super Admin' : 'Platform staff')}</small></div><button className="icon-button logout-button" onClick={() => void signOut()} title="Sign out" aria-label="Sign out"><MoreHorizontal size={17} /></button></div>
+        </div>
+      </aside>
+      <main className="main-content">
+        <header className="topbar"><button className="menu-button" onClick={() => setSidebarOpen(true)} aria-label="Open menu"><Menu size={20} /></button><div className="breadcrumbs"><span>ERP Management</span><ChevronRight size={14} /><strong>{section}</strong></div>
+          <div className="top-actions"><div className="command-search"><Search size={16} /><span>{user?.email}</span></div><button className="top-icon" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} aria-label="Toggle theme">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button><button className="top-avatar" title="Sign out" onClick={() => void signOut()}>{(user?.full_name || user?.email || 'SA').slice(0, 1).toUpperCase()}</button></div>
+        </header>
+        <div className="page-content"><div className="page-heading"><div><div className="eyebrow">{section === 'Overview' ? 'Live platform data' : 'Super Admin / Workspace'}</div><h1>{heading}</h1><p>{sectionDescriptions[section]}</p></div>{section === 'Overview' && <button className="outline-button"><Zap size={15} />Live data</button>}</div>
+          {section === 'Overview' ? <Overview goTo={setSection} />
+            : section === 'Module Management' ? <ModuleManagement />
+              : <PlatformRecords section={section} />}
+        </div>
+      </main>
+    </div>
+  )
 }
 
-function ConfigSection({ section, onCreate }: { section: Section; onCreate: () => void }) {
-  const isFields = section === 'Field Management'; const isModules = section === 'Module Management'; const isPlans = section === 'Plan Management';
-  if (isModules) return <ModuleManagement />
-  const cards = isFields ? [['Student ID','student_id','Text · School Management','Required'],['Emergency contact','emergency_contact','Phone · HR & Payroll','Optional'],['Enrollment date','enrollment_date','Date · School Management','Required'],['Department','department','Single select · HR & Payroll','Optional']] : isModules ? [['School Management','school-management','Education · v2.4','8 tenants'],['Inventory Management','inventory-management','Operations · v1.8','24 tenants'],['HR & Payroll','hr-payroll','People · v1.6','18 tenants'],['CRM','crm','Sales · v3.1','31 tenants']] : [['Starter','starter','$29 / month · 5 modules','42 tenants'],['Growth','growth','$99 / month · 12 modules','86 tenants'],['Professional','professional','$249 / month · 18 modules','64 tenants'],['Enterprise','enterprise','Custom pricing · All modules','22 tenants']];
-  return <section className="panel full-panel"><div className="panel-heading"><div><div className="eyebrow">Configuration</div><h2>{section}</h2><p>{sectionDescriptions[section]}</p></div><button className="primary-button" onClick={onCreate}><Plus size={16} />Create {isFields ? 'field' : isModules ? 'module' : 'plan'}</button></div><div className="toolbar"><div className="search-box"><Search size={16} /><input placeholder={`Search ${section.toLowerCase()}...`} /></div><button className="filter-button"><Filter size={15} />Filters</button><button className="filter-button">Recently updated <ChevronDown size={15} /></button></div><div className="config-grid">{cards.map((card, i) => <div className="config-card" key={card[0]}><div className="config-card-top"><div className={`config-icon icon-${i}`}>{isFields ? <FileCog size={18} /> : isModules ? <Package size={18} /> : <ClipboardList size={18} />}</div><button className="icon-button"><Ellipsis size={17} /></button></div><h3>{card[0]}</h3><code>{card[1]}</code><p>{card[2]}</p><div className="config-footer"><StatusBadge status="Active" /><span>{card[3]}</span></div></div>)}</div></section>
-}
-
-function SettingsSection({ theme, setTheme }: { theme: Theme; setTheme: (theme: Theme) => void }) { return <section className="panel full-panel settings-panel"><div className="eyebrow">Workspace configuration</div><h2>Platform settings</h2><p>Manage defaults and preferences for the entire platform.</p><div className="settings-tabs"><button className="active-tab">General</button><button>Branding</button><button>Registration</button><button>Notifications</button></div><div className="settings-form"><label>Platform name<input defaultValue="Northstar Platform" /></label><label>Support email<input defaultValue="support@northstar.io" /></label><label>Default timezone<select defaultValue="UTC -05:00"><option>UTC -05:00</option><option>UTC +00:00</option><option>UTC +05:30</option></select></label><label>Default currency<select defaultValue="USD — US Dollar"><option>USD — US Dollar</option><option>EUR — Euro</option><option>GBP — Pound sterling</option></select></label></div><div className="preference-row"><div><strong>Appearance</strong><p>Choose the default workspace appearance.</p></div><div className="theme-options"><button className={theme === 'light' ? 'theme-option selected' : 'theme-option'} onClick={() => setTheme('light')}><Sun size={15} />Light</button><button className={theme === 'dark' ? 'theme-option selected' : 'theme-option'} onClick={() => setTheme('dark')}><Moon size={15} />Dark</button></div></div><div className="settings-actions"><button className="secondary-button">Reset</button><button className="primary-button"><Check size={15} />Save changes</button></div></section> }
-
-export default function Page() {
-  const [section, setSection] = useState<Section>('Overview'); const [theme, setTheme] = useState<Theme>('light'); const [sidebarOpen, setSidebarOpen] = useState(false); const [toast, setToast] = useState('');
-  useEffect(() => { const saved = window.localStorage.getItem('super-admin-theme') as Theme | null; if (saved) setTheme(saved) }, []); useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); window.localStorage.setItem('super-admin-theme', theme) }, [theme]);
-  const heading = useMemo(() => section === 'Overview' ? 'Good morning, Alex' : section, [section]);
-  const create = () => { setToast(`${section === 'Overview' ? 'Tenant' : section.replace(' Management','').replace('Plan','plan').replace('Field','field').replace('Module','module')} creation flow is ready in this demo.`); window.setTimeout(() => setToast(''), 3000) };
-  return <div className="app-shell"><aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}><div className="brand"><div className="brand-mark"><Sparkles size={17} /></div><span>northstar</span><span className="brand-badge">ADMIN</span><button className="mobile-close" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div><div className="workspace-switch"><div className="workspace-logo">N</div><div><strong>Northstar Inc.</strong><small>Platform workspace</small></div><ChevronDown size={15} /></div><nav><span className="nav-label">Workspace</span>{navigation.map(({ label, icon: Icon }) => <button key={label} className={`nav-item ${section === label ? 'active' : ''}`} onClick={() => { setSection(label); setSidebarOpen(false) }}><Icon size={17} /><span>{label}</span>{label === 'Tenants' && <em>1,284</em>}</button>)}</nav><div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><CircleHelp size={17} /></div><div><strong>Need a hand?</strong><small>Visit help center</small></div><ChevronRight size={14} /></div><div className="profile"><div className="profile-avatar">AS</div><div><strong>Alex Morgan</strong><small>Super Admin</small></div><MoreHorizontal size={17} /></div></div></aside><main className="main-content"><header className="topbar"><button className="menu-button" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><div className="breadcrumbs"><span>Super Admin</span><ChevronRight size={14} /><strong>{section}</strong></div><div className="top-actions"><div className="command-search"><Search size={16} /><span>Search</span><kbd><Command size={11} />K</kbd></div><button className="top-icon"><Bell size={18} /><i /></button><button className="top-icon" onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</button><div className="top-avatar">AM</div></div></header><div className="page-content"><div className="page-heading"><div><div className="eyebrow">{section === 'Overview' ? 'Monday, June 24, 2024' : 'Super Admin / Workspace'}</div><h1>{heading}</h1><p>{sectionDescriptions[section]}</p></div>{section === 'Overview' && <button className="outline-button"><Clock3 size={15} />Last 30 days <ChevronDown size={15} /></button>}</div>{section === 'Overview' ? <Overview goTo={setSection} /> : section === 'Settings' ? <SettingsSection theme={theme} setTheme={setTheme} /> : ['Field Management','Module Management','Plan Management'].includes(section) ? <ConfigSection section={section} onCreate={create} /> : <RecordsSection section={section} onCreate={create} />}</div></main>{toast && <div className="toast"><Check size={16} />{toast}</div>}</div>
-}
+export default Page
